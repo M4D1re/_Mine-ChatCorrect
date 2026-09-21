@@ -12,7 +12,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertSame;
+
 class SpellCheckerTest {
+
+    @Test
+    void reusesResultsForUnchangedInput() {
+        SpellChecker checker = new SpellChecker(Set.of("hello", "world"));
+
+        List<MisspelledWord> errors = checker.findMisspellings("helo world");
+        assertFalse(errors.isEmpty());
+        assertSame(errors, checker.findMisspellings("helo world"));
+
+        List<String> suggestions = checker.suggestionsFor("helo");
+        assertFalse(suggestions.isEmpty());
+        assertSame(suggestions, checker.suggestionsFor("helo"));
+        assertSame(suggestions, checker.suggestionsFor("HELO"));
+
+        assertTrue(checker.findMisspellings("hello world").isEmpty());
+    }
+
+    @Test
+    void invalidatesCachedResultsWhenDictionaryChanges(@TempDir Path configDir) {
+        SpellChecker checker = new SpellChecker(configDir);
+        String word = "zzcacheprobe";
+
+        assertFalse(checker.findMisspellings(word).isEmpty());
+        assertFalse(checker.suggestionsFor(word).contains(word));
+
+        checker.addWord(word);
+
+        assertTrue(checker.findMisspellings(word).isEmpty());
+        assertTrue(checker.suggestionsFor(word).contains(word));
+    }
 
     @Test
     void findsRussianMisspellings() {

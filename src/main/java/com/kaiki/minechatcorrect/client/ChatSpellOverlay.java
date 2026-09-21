@@ -20,8 +20,7 @@ import java.util.List;
 public final class ChatSpellOverlay {
     private static final int UNDERLINE_COLOR = 0xFFFF5555;
 
-    private static String lastText = "";
-    private static List<MisspelledWord> cachedMisspellings = List.of();
+
 
     private ChatSpellOverlay() {
     }
@@ -44,10 +43,8 @@ public final class ChatSpellOverlay {
         }
 
         String text = input.getValue();
-        if (!text.equals(lastText)) {
-            lastText = text;
-            cachedMisspellings = checker.findMisspellings(text);
-        }
+        List<MisspelledWord> cachedMisspellings =
+                checker.findMisspellings(text);
 
         if (cachedMisspellings.isEmpty()) {
             return;
@@ -94,8 +91,10 @@ public final class ChatSpellOverlay {
      * Forces a full spell-check recalculation after dictionaries or settings change.
      */
     public static void clearCache() {
-        lastText = "";
-        cachedMisspellings = List.of();
+        SpellChecker checker = MineChatCorrectClient.spellChecker();
+        if (checker != null) {
+            checker.clearCaches();
+        }
     }
 
     private static int getDisplayPos(EditBox input) {

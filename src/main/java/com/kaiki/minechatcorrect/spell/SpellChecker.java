@@ -16,13 +16,19 @@ import java.util.regex.Pattern;
 
 public final class SpellChecker {
 
+    private Set<String> dictionary;
+
+    private String cachedText;
+    private List<MisspelledWord> cachedMisspellings = List.of();
+
+    private String cachedSuggestionWord;
+    private List<String> cachedSuggestions = List.of();
 
     private static final Pattern WORD_PATTERN =
             Pattern.compile("[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё']{2,}");
     private static final Pattern URL_PATTERN = Pattern.compile("(?i)(https?://\\S+|www\\.\\S+|\\b[a-z0-9.-]+\\.[a-z]{2,}\\S*)");
 
     private final DictionaryManager dictionaryManager;
-    private Set<String> dictionary;
 
     public SpellChecker(Path configDir) {
         this.dictionaryManager = new DictionaryManager(configDir);
@@ -34,7 +40,7 @@ public final class SpellChecker {
         this.dictionary = new LinkedHashSet<>(dictionary);
     }
 
-    public List<MisspelledWord> findMisspellings(String text) {
+    private List<MisspelledWord> calculateMisspellings(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
         }
@@ -64,7 +70,35 @@ public final class SpellChecker {
         return results;
     }
 
+    public List<MisspelledWord> findMisspellings(String text) {
+        String currentText = text == null ? "" : text;
+
+        if (currentText.equals(cachedText)) {
+            return cachedMisspellings;
+        }
+
+        List<MisspelledWord> result =
+                List.copyOf(calculateMisspellings(currentText));
+
+        cachedText = currentText;
+        cachedMisspellings = result;
+        return result;
+    }
+
     public List<String> suggestionsFor(String word) {
+        String normalized = word == null ? "" : normalize(word);
+
+        if (normalized.equals(cachedSuggestionWord)) {
+            return cachedSuggestions;
+        }
+        List<String> result =
+                List.copyOf(calculateSuggestions(normalized));
+        cachedSuggestionWord = normalized;
+        cachedSuggestions = result;
+        return result;
+    }
+
+    private List<String> calculateSuggestions(String word) {
         String normalized = normalize(word);
         if (normalized.isBlank()) {
             return List.of();
@@ -92,6 +126,19 @@ public final class SpellChecker {
         return dictionaryManager;
     }
 
+    public void clearCaches() {
+        cachedText = null;
+        cachedMisspellings = List.of();
+
+        cachedSuggestionWord = null;
+        cachedSuggestions = List.of();
+    }
+
+    private void refreshDictionary() {
+        dictionary = requireDictionaryManager().allWords();
+        clearCaches();
+    }
+
     public void addWord(String word) {
         requireDictionaryManager().addExtraWord(word);
         reloadDictionaries();
@@ -99,23 +146,23 @@ public final class SpellChecker {
 
     public void reloadDictionaries() {
         requireDictionaryManager().reload();
-        dictionary = dictionaryManager.allWords();
+        refreshDictionary();
     }
 
     public String importDictionary(String source) throws IOException {
         String name = requireDictionaryManager().importDictionary(source);
-        dictionary = dictionaryManager.allWords();
+        refreshDictionary();
         return name;
     }
 
     public void setDictionaryEnabled(String name, boolean enabled) {
         requireDictionaryManager().setDictionaryEnabled(name, enabled);
-        dictionary = dictionaryManager.allWords();
+        refreshDictionary();
     }
 
     public void removeDictionary(String name) {
         requireDictionaryManager().removeDictionary(name);
-        dictionary = dictionaryManager.allWords();
+        refreshDictionary();
     }
 
     private DictionaryManager requireDictionaryManager() {
