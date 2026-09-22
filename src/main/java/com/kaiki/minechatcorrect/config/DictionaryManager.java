@@ -77,15 +77,27 @@ public final class DictionaryManager {
     }
 
     public void addExtraWord(String word) {
-        if (AcceptedWordsStore.add(extraWords, word)) {
-            saveExtraWords();
+        Set<String> updated = new LinkedHashSet<>(extraWords);
+        if (AcceptedWordsStore.add(updated, word)) {
+            persistExtraWords(updated);
         }
     }
 
     public void removeExtraWord(String word) {
-        if (AcceptedWordsStore.remove(extraWords, word)) {
-            saveExtraWords();
+        Set<String> updated = new LinkedHashSet<>(extraWords);
+        if (AcceptedWordsStore.remove(updated, word)) {
+            persistExtraWords(updated);
         }
+    }
+
+    private void persistExtraWords(Set<String> updated) {
+        try {
+            AcceptedWordsStore.write(extraWordsFile, updated);
+        } catch (IOException exception) {
+            throw new java.io.UncheckedIOException("Could not save custom words", exception);
+        }
+        extraWords.clear();
+        extraWords.addAll(updated);
     }
 
     public void replaceExtraWord(String oldWord, String newWord) {

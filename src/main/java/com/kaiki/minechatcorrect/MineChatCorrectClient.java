@@ -23,7 +23,7 @@ public final class MineChatCorrectClient {
      */
     public static void initialize(Path configRoot) {
         Path configDir = configRoot.resolve(MOD_ID);
-        clientSettings = new ClientSettings(configDir);
+        // clientSettings = new ClientSettings(configDir);
         spellChecker = new SpellChecker(configDir);
     }
 

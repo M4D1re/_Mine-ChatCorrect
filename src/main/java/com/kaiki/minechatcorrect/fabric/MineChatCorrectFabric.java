@@ -9,6 +9,7 @@ public final class MineChatCorrectFabric implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         MineChatCorrectClient.initialize(FabricLoader.getInstance().getConfigDir());
-        FabricClientKeyMappings.register();
+        // FabricClientKeyMappings.register();
+        ChatCorrectCommands.register();
     }
 }
