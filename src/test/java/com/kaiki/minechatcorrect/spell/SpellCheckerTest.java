@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -13,8 +14,44 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SpellCheckerTest {
+
+    @Test
+    void preparedSearchDoesNotReplaceCachedSuggestions() {
+        SpellChecker checker = new SpellChecker(Set.of("hello", "world"));
+        List<String> cached = checker.suggestionsFor("helo");
+        var search = checker.prepareSuggestionSearch("wurld");
+
+        assertEquals(List.of("world"), search.get());
+        assertSame(cached, checker.suggestionsFor("helo"));
+    }
+
+    @Test
+    void preparedSearchKeepsItsDictionarySnapshot(@TempDir Path configDir) {
+        SpellChecker checker = new SpellChecker(configDir);
+        String word = "zzsnapshotprobe";
+        var oldSearch = checker.prepareSuggestionSearch(word);
+
+        checker.addWord(word);
+
+        assertFalse(oldSearch.get().contains(word));
+        assertTrue(checker.prepareSuggestionSearch(word).get().contains(word));
+    }
+
+    @Test
+    void preparedSearchRespondsToInterruption() {
+        SpellChecker checker = new SpellChecker(Set.of("hello", "world"));
+        var search = checker.prepareSuggestionSearch("helo");
+
+        try {
+            Thread.currentThread().interrupt();
+            assertThrows(CancellationException.class, () -> search.get());
+        } finally {
+            Thread.interrupted();
+        }
+    }
 
     @Test
     void reusesResultsForUnchangedInput() {

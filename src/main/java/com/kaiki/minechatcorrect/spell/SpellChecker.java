@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -64,7 +66,8 @@ public final class SpellChecker {
             ).add(word);
         }
 
-        wordsByLength = index;
+        index.replaceAll((length, words) -> List.copyOf(words));
+        wordsByLength = Map.copyOf(index);
     }
 
     private List<MisspelledWord> calculateMisspellings(String text) {
@@ -119,13 +122,23 @@ public final class SpellChecker {
             return cachedSuggestions;
         }
         List<String> result =
-                List.copyOf(calculateSuggestions(normalized));
+                List.copyOf(calculateSuggestions(normalized, wordsByLength));
         cachedSuggestionWord = normalized;
         cachedSuggestions = result;
         return result;
     }
 
-    private List<String> calculateSuggestions(String normalized) {
+    /**
+     * Call on the client thread. The returned task searches a captured immutable
+     * index and can run on a worker thread without reading or changing caches.
+     */
+    public Supplier<List<String>> prepareSuggestionSearch(String word) {
+        String normalized = word == null ? "" : normalize(word);
+        Map<Integer, List<String>> snapshot = wordsByLength;
+        return () -> calculateSuggestions(normalized, snapshot);
+    }
+
+    private List<String> calculateSuggestions(String normalized, Map<Integer, List<String>> index) {
         if (normalized.isBlank()) {
             return List.of();
         }
@@ -144,12 +157,15 @@ public final class SpellChecker {
         int maxLength = normalized.length() + 2;
 
         for (int length = minLength; length <= maxLength; length++) {
-            List<String> candidates = wordsByLength.get(length);
+            List<String> candidates = index.get(length);
             if (candidates == null) {
                 continue;
             }
 
             for (String candidate : candidates) {
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new CancellationException("Suggestion search cancelled");
+                }
                 int cutoff = maxDistance;
 
                 if (best.size() == MAX_SUGGESTIONS) {
