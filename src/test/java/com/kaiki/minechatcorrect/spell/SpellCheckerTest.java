@@ -159,4 +159,46 @@ class SpellCheckerTest {
         assertTrue(errors.isEmpty(), () -> "Не распознаны словоформы: " + errors);
     }
 
+    @Test
+    void returnsEightBestSuggestionsInStableOrder() {
+        SpellChecker checker = new SpellChecker(Set.of(
+                "cat", "bat", "can", "cap", "car",
+                "cot", "cut", "hat", "mat", "rat"
+        ));
+
+        assertEquals(
+                List.of("cat", "bat", "can", "cap", "car", "cot", "cut", "hat"),
+                checker.suggestionsFor("cat")
+        );
+    }
+
+    @Test
+    void includesDistanceBoundaryAndRejectsDistantCandidates() {
+        SpellChecker checker = new SpellChecker(Set.of(
+                "abcdefgh",
+                "abxyef",
+                "abxyzf",
+                "abcdefghi"
+        ));
+
+        assertEquals(
+                List.of("abcdefgh", "abxyef"),
+                checker.suggestionsFor("abcdef")
+        );
+    }
+
+    @Test
+    void preservesLargerDistanceThresholdForLongWords() {
+        SpellChecker checker = new SpellChecker(Set.of(
+                "abcxyzghi",
+                "abxxxxghi",
+                "abcdef"
+        ));
+
+        assertEquals(
+                List.of("abcxyzghi"),
+                checker.suggestionsFor("abcdefghi")
+        );
+    }
+
 }

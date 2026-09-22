@@ -13,8 +13,20 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.PriorityQueue;
+
 
 public final class SpellChecker {
+
+    private static final int MAX_SUGGESTIONS = 8;
+
+    private static final Comparator<Suggestion> SUGGESTION_ORDER =
+            Comparator.comparingInt(Suggestion::distance)
+                    .thenComparing(Suggestion::word);
+
+    private Map<Integer, List<String>> wordsByLength = Map.of();
 
     private Set<String> dictionary;
 
@@ -33,11 +45,26 @@ public final class SpellChecker {
     public SpellChecker(Path configDir) {
         this.dictionaryManager = new DictionaryManager(configDir);
         this.dictionary = dictionaryManager.allWords();
+        rebuildDictionaryIndex();
     }
 
     SpellChecker(Set<String> dictionary) {
         this.dictionaryManager = null;
         this.dictionary = new LinkedHashSet<>(dictionary);
+        rebuildDictionaryIndex();
+    }
+
+    private void rebuildDictionaryIndex() {
+        Map<Integer, List<String>> index = new HashMap<>();
+
+        for (String word : dictionary) {
+            index.computeIfAbsent(
+                    word.length(),
+                    length -> new ArrayList<>()
+            ).add(word);
+        }
+
+        wordsByLength = index;
     }
 
     private List<MisspelledWord> calculateMisspellings(String text) {
@@ -208,9 +235,16 @@ public final class SpellChecker {
         return normalized;
     }
 
-    private int distance(String left, String right) {
-        int[] previous = new int[right.length() + 1];
-        int[] current = new int[right.length() + 1];
+    private int distance(
+            String left,
+            String right,
+            int maxDistance,
+            int[] previous,
+            int[] current
+    ) {
+        if (Math.abs(left.length() - right.length()) > maxDistance) {
+            return maxDistance + 1;
+        }
 
         for (int j = 0; j <= right.length(); j++) {
             previous[j] = j;
@@ -218,12 +252,23 @@ public final class SpellChecker {
 
         for (int i = 1; i <= left.length(); i++) {
             current[0] = i;
+            int rowMinimum = current[0];
+
             for (int j = 1; j <= right.length(); j++) {
-                int cost = left.charAt(i - 1) == right.charAt(j - 1) ? 0 : 1;
+                int cost = left.charAt(i - 1) == right.charAt(j - 1)
+                        ? 0
+                        : 1;
+
                 current[j] = Math.min(
                         Math.min(current[j - 1] + 1, previous[j] + 1),
                         previous[j - 1] + cost
                 );
+
+                rowMinimum = Math.min(rowMinimum, current[j]);
+            }
+
+            if (rowMinimum > maxDistance) {
+                return maxDistance + 1;
             }
 
             int[] swap = previous;
