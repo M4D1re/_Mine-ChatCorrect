@@ -125,18 +125,70 @@ public final class SpellChecker {
         return result;
     }
 
-    private List<String> calculateSuggestions(String word) {
-        String normalized = normalize(word);
+    private List<String> calculateSuggestions(String normalized) {
         if (normalized.isBlank()) {
             return List.of();
         }
 
-        return dictionary.stream()
-                .filter(candidate -> Math.abs(candidate.length() - normalized.length()) <= 2)
-                .map(candidate -> new Suggestion(candidate, distance(normalized, candidate)))
-                .filter(suggestion -> suggestion.distance() <= Math.max(2, normalized.length() / 3))
-                .sorted(Comparator.comparingInt(Suggestion::distance).thenComparing(Suggestion::word))
-                .limit(8)
+        int maxDistance = Math.max(2, normalized.length() / 3);
+
+        PriorityQueue<Suggestion> best = new PriorityQueue<>(
+                MAX_SUGGESTIONS,
+                SUGGESTION_ORDER.reversed()
+        );
+
+        int[] previous = new int[normalized.length() + 1];
+        int[] current = new int[normalized.length() + 1];
+
+        int minLength = Math.max(0, normalized.length() - 2);
+        int maxLength = normalized.length() + 2;
+
+        for (int length = minLength; length <= maxLength; length++) {
+            List<String> candidates = wordsByLength.get(length);
+            if (candidates == null) {
+                continue;
+            }
+
+            for (String candidate : candidates) {
+                int cutoff = maxDistance;
+
+                if (best.size() == MAX_SUGGESTIONS) {
+                    cutoff = Math.min(cutoff, best.peek().distance());
+                }
+
+                int candidateDistance = distance(
+                        candidate,
+                        normalized,
+                        cutoff,
+                        previous,
+                        current
+                );
+
+                if (candidateDistance > cutoff) {
+                    continue;
+                }
+
+                if (best.size() == MAX_SUGGESTIONS) {
+                    Suggestion worst = best.peek();
+
+                    boolean isBetter =
+                            candidateDistance < worst.distance()
+                                    || (candidateDistance == worst.distance()
+                                    && candidate.compareTo(worst.word()) < 0);
+
+                    if (!isBetter) {
+                        continue;
+                    }
+
+                    best.poll();
+                }
+
+                best.offer(new Suggestion(candidate, candidateDistance));
+            }
+        }
+
+        return best.stream()
+                .sorted(SUGGESTION_ORDER)
                 .map(Suggestion::word)
                 .toList();
     }
@@ -163,6 +215,7 @@ public final class SpellChecker {
 
     private void refreshDictionary() {
         dictionary = requireDictionaryManager().allWords();
+        rebuildDictionaryIndex();
         clearCaches();
     }
 
